@@ -6,6 +6,7 @@ import com.seedfinding.mcfeature.structure.UniformStructure;
 import meteordevelopment.meteorclient.utils.misc.ISerializable;
 import meteordevelopment.meteorclient.utils.network.MeteorExecutor;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.util.math.MathHelper;
 
 import java.util.List;
 import java.util.Objects;
@@ -32,26 +33,26 @@ public class StructureLifting {
 
             long[] lowerBits = lowerBitsStream.parallel().toArray();
 
-            // second step
+            // calculate the amount of progress bar updates to report
+            int lowerBitsCount = lowerBits.length;
+            int updatesPerUpperBits = MathHelper.ceil((float) 1000 / lowerBitsCount);
+            int maskBits = 29 - MathHelper.ceilLog2(updatesPerUpperBits);
+            long progressUpdateMask = (1L << maskBits) - 1;
+            int progressUpdateCount = MathHelper.smallestEncompassingPowerOfTwo(updatesPerUpperBits) * lowerBitsCount;
 
-            long lowerBitsCount = lowerBits.length;
-            long progressBarUpdates = 1L << 4;
-            long progressUpdateMask = (1L << 25) - 1;
             AtomicLong counter = new AtomicLong();
 
             LongStream seedStream = LongStream.of(lowerBits).mapMulti((lowBits, consumer) -> {
                 for (long upperBits = 0; upperBits < (1L << 48 - 19); upperBits++) {
                     consumer.accept((upperBits << 19) | lowBits);
+
+                    if ((upperBits & progressUpdateMask) == 0) {
+                        progressCallback.report((double) counter.incrementAndGet() / progressUpdateCount);
+                    }
                 }
             });
 
             LongStream structureSeedStream = seedStream.filter(seed -> {
-                // the rate at which progress updates are reported currently depends on 'lowerBitsCount'
-                // ideally 'progressBarUpdates' should change depending on 'lowerBitsCount'
-                if (((seed >> 19) & progressUpdateMask) == 0) {
-                    progressCallback.report((double) counter.incrementAndGet() / progressBarUpdates / lowerBitsCount);
-                }
-
                 ChunkRand rand = threadLocal.get();
                 for (Data data : dataList) {
                     rand.setRegionSeed(seed, data.regionX, data.regionZ, data.salt, version);
