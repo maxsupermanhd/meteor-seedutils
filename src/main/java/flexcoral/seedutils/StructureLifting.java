@@ -1,8 +1,10 @@
 package flexcoral.seedutils;
 
+import com.google.common.util.concurrent.AtomicDouble;
 import com.seedfinding.mccore.rand.ChunkRand;
 import com.seedfinding.mccore.version.MCVersion;
 import com.seedfinding.mcfeature.structure.UniformStructure;
+import meteordevelopment.meteorclient.gui.widgets.WLabel;
 import meteordevelopment.meteorclient.utils.misc.ISerializable;
 import meteordevelopment.meteorclient.utils.network.MeteorExecutor;
 import net.minecraft.nbt.NbtCompound;
@@ -11,10 +13,31 @@ import net.minecraft.util.math.MathHelper;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.LongStream;
 
 public class StructureLifting {
+    public static WLabel statusLabel = null;
+    public static CompletableFuture<long[]> currentLifting = null;
+    public static double currentLiftingProgress = 0;
+
+    public static String getLiftingStatus() {
+        if (currentLifting == null) {
+            return "Lifting: not yet started";
+        } else if (currentLifting.isDone()) {
+            try {
+                return String.format("Lifting: done (%d structure seeds)", currentLifting.get().length);
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        } else if (currentLifting.isCancelled()) {
+            return "Lifting: cancelled";
+        } else {
+            return String.format("Lifting: working (%.1f%%)", currentLiftingProgress*100);
+        }
+    }
+
     public static CompletableFuture<long[]> crack(List<Data> dataList, MCVersion version, Progress progressCallback) {
         return CompletableFuture.supplyAsync(() -> {
             ThreadLocal<ChunkRand> threadLocal = ThreadLocal.withInitial(ChunkRand::new);

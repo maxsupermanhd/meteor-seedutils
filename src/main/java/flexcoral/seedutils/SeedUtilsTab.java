@@ -5,6 +5,9 @@
 
 package flexcoral.seedutils;
 
+import com.mojang.brigadier.StringReader;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.seedfinding.mccore.rand.seed.StructureSeed;
 import com.seedfinding.mccore.version.MCVersion;
 import com.seedfinding.mcfeature.Feature;
 import com.seedfinding.mcfeature.structure.*;
@@ -19,16 +22,16 @@ import meteordevelopment.meteorclient.gui.widgets.containers.WVerticalList;
 import meteordevelopment.meteorclient.gui.widgets.input.WDropdown;
 import meteordevelopment.meteorclient.gui.widgets.input.WIntEdit;
 import meteordevelopment.meteorclient.gui.widgets.pressable.WButton;
-import meteordevelopment.meteorclient.utils.Utils;
-import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.nbt.StringNbtReader;
+import net.minecraft.nbt.visitor.StringNbtWriter;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+
+import static meteordevelopment.meteorclient.MeteorClient.mc;
 
 public class SeedUtilsTab extends Tab {
     public SeedUtilsTab() {
@@ -97,8 +100,7 @@ public class SeedUtilsTab extends Tab {
 
             WHorizontalList addOpts = theme.horizontalList();
             section.add(addOpts);
-
-            String[] defaultStructureNames = {"buried_treasure", "desert_pyramid", "end_city", "igloo", "jungle_pyramid", "monument", "pillager_outpost", "shipwreck", "swamp_hut"};
+            String[] defaultStructureNames = {"igloo", "desert_pyramid", "jungle_pyramid", "swamp_hut", "shipwreck", "monument", "pillager_outpost"};
             WDropdown<String> addStructType = addOpts.add(theme.dropdown(defaultStructureNames, "desert_pyramid")).widget();
             var addX = addOpts.add(theme.intEdit(0, Integer.MIN_VALUE, Integer.MAX_VALUE, true)).widget();
             var addZ = addOpts.add(theme.intEdit(0, Integer.MIN_VALUE, Integer.MAX_VALUE, true)).widget();
@@ -109,39 +111,76 @@ public class SeedUtilsTab extends Tab {
                 sys.addStructureData(new StructureLifting.Data((UniformStructure<?>) s, addX.get(), addZ.get()));
                 reload();
             };
+
+            WHorizontalList clipOpts = theme.horizontalList();
+            section.add(clipOpts);
+            WButton fromClipBtn = clipOpts.add(theme.button("From clipboard")).widget();
+            fromClipBtn.action = () -> {
+                try {
+                    SeedUtilsSystem.get().fromTag(new StringNbtReader(new StringReader(mc.keyboard.getClipboard())).parseCompound());
+                } catch (CommandSyntaxException ignored) {}
+            };
+            WButton toClipBtn = clipOpts.add(theme.button("To clipboard")).widget();
+            toClipBtn.action = () -> mc.keyboard.setClipboard(new StringNbtWriter().apply(sys.toTag()));
         }
 
         public void fillLiftingSection(GuiTheme theme, WSection section) {
+            StructureLifting.statusLabel = section.add(theme.label(StructureLifting.getLiftingStatus())).expandX().widget();
             WButton startBtn = section.add(theme.button("Start lifting")).expandX().widget();
             startBtn.action = () -> {
-
-                startBtn.action = null; //fuck you
+                if (StructureLifting.currentLifting != null &&
+                    !StructureLifting.currentLifting.isCancelled() &&
+                    !StructureLifting.currentLifting.isDone()) {
+                    return;
+                }
 
                 StructureLifting.Progress progressListener = progress -> MinecraftClient.getInstance().execute(() -> {
-                    if (Utils.canUpdate()) {
-                        MinecraftClient.getInstance().inGameHud.setOverlayMessage(Text.literal("Seed lifting is ")
-                            .append(Text.literal(String.format("%.1f%%", progress * 100)).formatted(Formatting.GREEN))
-                            .append(" done."), false);
+                    if (StructureLifting.statusLabel == null) {
+                        return;
                     }
+                    StructureLifting.statusLabel.set(StructureLifting.getLiftingStatus());
                 });
 
-                CompletableFuture<long[]> seedFuture = StructureLifting.crack(SeedUtilsSystem.get().getAllStructureData().values().stream().toList(), MCVersion.v1_21, progressListener);
+                StructureLifting.currentLifting = StructureLifting.crack(SeedUtilsSystem.get().getAllStructureData().values().stream().toList(), MCVersion.v1_21, progressListener);
 
-                seedFuture.thenAcceptAsync(seeds -> {
-                    if (Utils.canUpdate()) {
-                        if (seeds.length == 0) {
-                            ChatUtils.infoPrefix("SeedUtils", "Seed cracking finished no seeds found.");
-                        } else {
-                            ChatUtils.infoPrefix("SeedUtils", "Seed cracking finished with (highlight)" + seeds.length + "(default) seeds:");
-                            for (int i = 0; i < Math.min(5, seeds.length); i++) {
-                                ChatUtils.info("- (highlight)" + seeds[i]);
-                            }
-                            if (seeds.length > 5) {
-                                ChatUtils.info("And " + (seeds.length - 5) + " more.");
-                            }
-                        }
+                StructureLifting.currentLifting.thenAcceptAsync(seeds -> {
+                    if (StructureLifting.statusLabel == null) {
+                        return;
                     }
+                    StructureLifting.statusLabel.set(StructureLifting.getLiftingStatus());
                 }, MinecraftClient.getInstance());
+            };
+            WButton structureSeedsToClipBtn = section.add(theme.button("Copy structure seeds")).widget();
+            structureSeedsToClipBtn.action = () -> {
+                long[] structureSeeds;
+                try {
+                    structureSeeds = StructureLifting.currentLifting.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    throw new RuntimeException(e);
+                }
+                StringBuilder b = new StringBuilder();
+                for (long structureSeed : structureSeeds) {
+                    b.append(structureSeed);
+                    b.append('\n');
+                }
+                mc.keyboard.setClipboard(b.toString());
+            };
+            WButton worldSeedsToClipBtn = section.add(theme.button("Copy random world seeds")).widget();
+            worldSeedsToClipBtn.action = () -> {
+                long[] structureSeeds;
+                try {
+                    structureSeeds = StructureLifting.currentLifting.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    throw new RuntimeException(e);
+                }
+                StringBuilder b = new StringBuilder();
+                for (long structureSeed : structureSeeds) {
+                    for (Long randomWorldSeed : StructureSeed.toRandomWorldSeeds(structureSeed)) {
+                        b.append(randomWorldSeed);
+                        b.append('\n');
+                    }
+                }
+                mc.keyboard.setClipboard(b.toString());
             };
         }
 

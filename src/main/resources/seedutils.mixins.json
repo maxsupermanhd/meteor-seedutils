@@ -3,7 +3,6 @@
   "package": "flexcoral.seedutils.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "SystemsAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
