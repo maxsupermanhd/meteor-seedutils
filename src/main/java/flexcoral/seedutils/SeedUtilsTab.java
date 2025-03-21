@@ -100,8 +100,7 @@ public class SeedUtilsTab extends Tab {
 
             WHorizontalList addOpts = theme.horizontalList();
             section.add(addOpts);
-            String[] defaultStructureNames = {"igloo", "desert_pyramid", "jungle_pyramid", "swamp_hut", "shipwreck", "monument", "pillager_outpost"};
-            WDropdown<String> addStructType = addOpts.add(theme.dropdown(defaultStructureNames, "desert_pyramid")).widget();
+            WDropdown<String> addStructType = addOpts.add(theme.dropdown(defaultStructures.keySet().toArray(new String[0]), "desert_pyramid")).widget();
             var addX = addOpts.add(theme.intEdit(0, Integer.MIN_VALUE, Integer.MAX_VALUE, true)).widget();
             var addZ = addOpts.add(theme.intEdit(0, Integer.MIN_VALUE, Integer.MAX_VALUE, true)).widget();
             WDropdown<MCVersion> addVer = addOpts.add(theme.dropdown(MCVersion.values(), MCVersion.v1_21)).widget();
@@ -119,29 +118,45 @@ public class SeedUtilsTab extends Tab {
                 try {
                     SeedUtilsSystem.get().fromTag(new StringNbtReader(new StringReader(mc.keyboard.getClipboard())).parseCompound());
                 } catch (CommandSyntaxException ignored) {}
+                reload();
             };
             WButton toClipBtn = clipOpts.add(theme.button("To clipboard")).widget();
-            toClipBtn.action = () -> mc.keyboard.setClipboard(new StringNbtWriter().apply(sys.toTag()));
+            toClipBtn.action = () -> {
+                mc.keyboard.setClipboard(new StringNbtWriter().apply(sys.toTag()));
+                toClipBtn.set(String.format("Copied %d structures", sys.getAllStructureData().size()));
+            };
         }
 
         public void fillLiftingSection(GuiTheme theme, WSection section) {
             StructureLifting.statusLabel = section.add(theme.label(StructureLifting.getLiftingStatus())).expandX().widget();
-            WButton startBtn = section.add(theme.button("Start lifting")).expandX().widget();
+            WTable controls = section.add(theme.table()).expandX().widget();
+            WButton startBtn = controls.add(theme.button("Start")).expandX().widget();
             startBtn.action = () -> {
                 if (StructureLifting.currentLifting != null &&
                     !StructureLifting.currentLifting.isCancelled() &&
                     !StructureLifting.currentLifting.isDone()) {
                     return;
                 }
+                var d = SeedUtilsSystem.get().getAllStructureData().values().stream().toList();
+                if (d.size() < 4) {
+                    String warnText = "Warning! Lifting with <4 setructures will result in millions of seeds, are you sure you want to try this?";
+                    if (!startBtn.getText().equals(warnText)) {
+                        startBtn.set(warnText);
+                        return;
+                    } else {
+                        startBtn.set("Start");
+                    }
+                }
 
                 StructureLifting.Progress progressListener = progress -> MinecraftClient.getInstance().execute(() -> {
                     if (StructureLifting.statusLabel == null) {
                         return;
                     }
+                    StructureLifting.currentLiftingProgress = progress;
                     StructureLifting.statusLabel.set(StructureLifting.getLiftingStatus());
                 });
 
-                StructureLifting.currentLifting = StructureLifting.crack(SeedUtilsSystem.get().getAllStructureData().values().stream().toList(), MCVersion.v1_21, progressListener);
+                StructureLifting.currentLifting = StructureLifting.crack(d, MCVersion.v1_21, progressListener);
 
                 StructureLifting.currentLifting.thenAcceptAsync(seeds -> {
                     if (StructureLifting.statusLabel == null) {
@@ -150,7 +165,15 @@ public class SeedUtilsTab extends Tab {
                     StructureLifting.statusLabel.set(StructureLifting.getLiftingStatus());
                 }, MinecraftClient.getInstance());
             };
-            WButton structureSeedsToClipBtn = section.add(theme.button("Copy structure seeds")).widget();
+//            WButton cancelBtn = controls.add(theme.button("Cancel lifting")).expandX().widget();
+//            cancelBtn.action = () -> {
+//                mc.execute(() -> {
+//                    reload();
+//                });
+//            };
+            controls.row();
+            WTable results = section.add(theme.table()).expandX().widget();
+            WButton structureSeedsToClipBtn = results.add(theme.button("Copy structure seeds")).expandX().widget();
             structureSeedsToClipBtn.action = () -> {
                 long[] structureSeeds;
                 try {
@@ -164,8 +187,9 @@ public class SeedUtilsTab extends Tab {
                     b.append('\n');
                 }
                 mc.keyboard.setClipboard(b.toString());
+                structureSeedsToClipBtn.set(String.format("Copied %d structure seeds", structureSeeds.length));
             };
-            WButton worldSeedsToClipBtn = section.add(theme.button("Copy random world seeds")).widget();
+            WButton worldSeedsToClipBtn = results.add(theme.button("Copy random world seeds")).expandX().widget();
             worldSeedsToClipBtn.action = () -> {
                 long[] structureSeeds;
                 try {
@@ -174,28 +198,30 @@ public class SeedUtilsTab extends Tab {
                     throw new RuntimeException(e);
                 }
                 StringBuilder b = new StringBuilder();
+                int copyLength = 0;
                 for (long structureSeed : structureSeeds) {
                     for (Long randomWorldSeed : StructureSeed.toRandomWorldSeeds(structureSeed)) {
+                        copyLength++;
                         b.append(randomWorldSeed);
                         b.append('\n');
                     }
                 }
                 mc.keyboard.setClipboard(b.toString());
+                worldSeedsToClipBtn.set(String.format("Copied %d random world seeds", copyLength));
             };
+            results.row();
         }
 
         public static Map<String, FeatureFactory<? extends Structure<?, ?>>> defaultStructures = new HashMap<>();
 
         static {
-            defaultStructures.put("buried_treasure", BuriedTreasure::new);
-            defaultStructures.put("desert_pyramid", DesertPyramid::new);
-            defaultStructures.put("end_city", EndCity::new);
             defaultStructures.put("igloo", Igloo::new);
+            defaultStructures.put("desert_pyramid", DesertPyramid::new);
             defaultStructures.put("jungle_pyramid", JunglePyramid::new);
+            defaultStructures.put("swamp_hut", SwampHut::new);
             defaultStructures.put("monument", Monument::new);
             defaultStructures.put("pillager_outpost", PillagerOutpost::new);
             defaultStructures.put("shipwreck", Shipwreck::new);
-            defaultStructures.put("swamp_hut", SwampHut::new);
         }
 
         interface FeatureFactory<T extends Feature<?, ?>> {

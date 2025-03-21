@@ -24,17 +24,17 @@ public class StructureLifting {
 
     public static String getLiftingStatus() {
         if (currentLifting == null) {
-            return "Lifting: not yet started";
+            return "Status: not yet started";
         } else if (currentLifting.isDone()) {
             try {
-                return String.format("Lifting: done (%d structure seeds)", currentLifting.get().length);
+                return String.format("Status: done (%d structure seeds)", currentLifting.get().length);
             } catch (InterruptedException | ExecutionException e) {
                 throw new RuntimeException(e);
             }
         } else if (currentLifting.isCancelled()) {
-            return "Lifting: cancelled";
+            return "Status: cancelled";
         } else {
-            return String.format("Lifting: working (%.1f%%)", currentLiftingProgress*100);
+            return String.format("Status: working (%.2f%%)", currentLiftingProgress*100);
         }
     }
 
