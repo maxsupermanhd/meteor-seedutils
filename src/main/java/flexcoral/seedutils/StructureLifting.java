@@ -10,6 +10,8 @@ import meteordevelopment.meteorclient.utils.network.MeteorExecutor;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.util.math.MathHelper;
 
+import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -35,6 +37,17 @@ public class StructureLifting {
             return "Status: cancelled";
         } else {
             return String.format("Status: working (%.2f%%)", currentLiftingProgress*100);
+        }
+    }
+
+    public static List<Long> getStructureSeeds() {
+        if (currentLifting == null) {
+            return new LinkedList<>();
+        }
+        try {
+            return Arrays.stream(currentLifting.get()).boxed().toList();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException(e);
         }
     }
 

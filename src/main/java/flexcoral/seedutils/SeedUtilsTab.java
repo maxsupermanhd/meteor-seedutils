@@ -27,8 +27,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.nbt.StringNbtReader;
 import net.minecraft.nbt.visitor.StringNbtWriter;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 import static meteordevelopment.meteorclient.MeteorClient.mc;
@@ -175,28 +174,18 @@ public class SeedUtilsTab extends Tab {
             WTable results = section.add(theme.table()).expandX().widget();
             WButton structureSeedsToClipBtn = results.add(theme.button("Copy structure seeds")).expandX().widget();
             structureSeedsToClipBtn.action = () -> {
-                long[] structureSeeds;
-                try {
-                    structureSeeds = StructureLifting.currentLifting.get();
-                } catch (InterruptedException | ExecutionException e) {
-                    throw new RuntimeException(e);
-                }
+                List<Long> structureSeeds = StructureLifting.getStructureSeeds();
                 StringBuilder b = new StringBuilder();
                 for (long structureSeed : structureSeeds) {
                     b.append(structureSeed);
                     b.append('\n');
                 }
                 mc.keyboard.setClipboard(b.toString());
-                structureSeedsToClipBtn.set(String.format("Copied %d structure seeds", structureSeeds.length));
+                structureSeedsToClipBtn.set(String.format("Copied %d structure seeds", structureSeeds.size()));
             };
             WButton worldSeedsToClipBtn = results.add(theme.button("Copy random world seeds")).expandX().widget();
             worldSeedsToClipBtn.action = () -> {
-                long[] structureSeeds;
-                try {
-                    structureSeeds = StructureLifting.currentLifting.get();
-                } catch (InterruptedException | ExecutionException e) {
-                    throw new RuntimeException(e);
-                }
+                List<Long> structureSeeds = StructureLifting.getStructureSeeds();
                 StringBuilder b = new StringBuilder();
                 int copyLength = 0;
                 for (long structureSeed : structureSeeds) {
@@ -208,6 +197,21 @@ public class SeedUtilsTab extends Tab {
                 }
                 mc.keyboard.setClipboard(b.toString());
                 worldSeedsToClipBtn.set(String.format("Copied %d random world seeds", copyLength));
+            };
+            results.row();
+            WButton structureSeedsShowBtn = results.add(theme.button("View structure seeds")).expandX().widget();
+            structureSeedsShowBtn.action = () -> {
+                List<Long> structureSeeds = StructureLifting.getStructureSeeds();
+                mc.setScreen(new LongsViewScreen(theme, "Lifted structure seeds", structureSeeds));
+            };
+            WButton worldSeedsShowBtn = results.add(theme.button("View random world seeds")).expandX().widget();
+            worldSeedsShowBtn.action = () -> {
+                List<Long> structureSeeds = StructureLifting.getStructureSeeds();
+                List<Long> ws = new ArrayList<>();
+                for (long structureSeed : structureSeeds) {
+                    ws.addAll(StructureSeed.toRandomWorldSeeds(structureSeed));
+                }
+                mc.setScreen(new LongsViewScreen(theme, "Lifted random world seeds", ws));
             };
             results.row();
         }
