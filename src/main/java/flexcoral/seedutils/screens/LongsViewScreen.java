@@ -1,4 +1,4 @@
-package flexcoral.seedutils;
+package flexcoral.seedutils.screens;
 
 import meteordevelopment.meteorclient.gui.GuiTheme;
 import meteordevelopment.meteorclient.gui.WindowScreen;

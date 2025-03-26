@@ -1,70 +1,113 @@
 package flexcoral.seedutils;
 
+import com.seedfinding.mcfeature.structure.UniformStructure;
 import meteordevelopment.meteorclient.systems.System;
 import meteordevelopment.meteorclient.systems.Systems;
-import meteordevelopment.meteorclient.utils.misc.NbtUtils;
+import meteordevelopment.meteorclient.utils.misc.ISerializable;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
+import net.minecraft.nbt.NbtList;
 
 import java.util.*;
 
 public class SeedUtilsSystem extends System<SeedUtilsSystem> {
     public SeedUtilsSystem() {
-        super("Seed utils");
+        super("seedutils");
     }
     public static SeedUtilsSystem get() {
         return Systems.get(SeedUtilsSystem.class);
     }
 
-    private final Map<UUID, StructureLifting.Data> structureData = new HashMap<>();
+    public List<StructureDataSet> savedStructureDataSets = new ArrayList<>();
+    public StructureDataSet activeStructureDataSet;
 
-    public Map<UUID, StructureLifting.Data> getAllStructureData() {
-        return structureData;
-    }
+    public static class StructureDataSet implements ISerializable<StructureDataSet> {
+        public List<StructureData> data;
+        public String name;
+        public long createdAt;
 
-    public void addStructureData(StructureLifting.Data d) {
-        var u = UUID.randomUUID();
-        for(; structureData.containsKey(u); u = UUID.randomUUID()) {}
-        structureData.put(u, d);
-    }
+        public StructureDataSet(String name) {
+            this.data = new ArrayList<>();
+            this.name = name;
+        }
 
-    public void setStructureData(UUID u, StructureLifting.Data d) {
-        structureData.put(u, d);
-    }
+        public StructureDataSet(NbtCompound tag) {
+            fromTag(tag);
+        }
 
-    public void removeStructureData(UUID u) {
-        structureData.remove(u);
-    }
-
-    public void removeStructureData(StructureLifting.Data d) {
-        for(UUID u : structureData.keySet()) {
-            if(structureData.get(u).equals(d)) {
-                structureData.remove(u);
-                return;
+        @Override
+        public NbtCompound toTag() {
+            NbtCompound tag = new NbtCompound();
+            tag.putString("name", name);
+            tag.putLong("createdAt", createdAt);
+            NbtList structs = new NbtList();
+            for (StructureData d : data) {
+                structs.add(d.toTag());
             }
+            tag.put("structs", structs);
+            return tag;
+        }
+
+        @Override
+        public StructureDataSet fromTag(NbtCompound tag) {
+            name = tag.getString("server");
+            createdAt = tag.getLong("createdAt");
+            data = new ArrayList<>();
+            NbtList structs = tag.getList("structs", NbtElement.COMPOUND_TYPE);
+            for (NbtElement struct : structs) {
+                data.add(new StructureData((NbtCompound) struct));
+            }
+            return this;
         }
     }
 
-    public void clearStructureData() {
-        structureData.clear();
+    public static class StructureData extends StructureLifting.Data {
+        public long addedAt = 0;
+
+        public StructureData(UniformStructure<?> structure, int chunkX, int chunkZ) {
+            super(structure, chunkX, chunkZ);
+            addedAt = java.lang.System.currentTimeMillis();
+        }
+
+        public StructureData(NbtCompound tag) {
+            super(tag);
+            fromTag(tag);
+        }
+
+        @Override
+        public StructureLifting.Data fromTag(NbtCompound tag) {
+            super.fromTag(tag);
+            addedAt = tag.getLong("addedAt");
+            return this;
+        }
+
+        @Override
+        public NbtCompound toTag() {
+            NbtCompound tag = super.toTag();
+            tag.putLong("addedAt", addedAt);
+            return tag;
+        }
     }
 
     @Override
     public NbtCompound toTag() {
         NbtCompound tag = new NbtCompound();
-        NbtCompound structs = new NbtCompound();
-        for (var e : structureData.entrySet()) {
-            structs.put(e.getKey().toString(), e.getValue().toTag());
+        NbtList saved = new NbtList();
+        for (var e : savedStructureDataSets) {
+            saved.add(e.toTag());
         }
-        tag.put("structures", structs);
+        tag.put("saved", saved);
+        tag.put("active", activeStructureDataSet.toTag());
         return tag;
     }
     @Override
     public SeedUtilsSystem fromTag(NbtCompound tag) {
-        var structs = tag.getCompound("structures");
-        for (var k : structs.getKeys()) {
-            structureData.put(UUID.fromString(k), new StructureLifting.Data(structs.getCompound(k)));
+        NbtList saved = tag.getList("saved", NbtElement.COMPOUND_TYPE);
+        savedStructureDataSets = new ArrayList<>();
+        for (NbtElement s : saved) {
+            savedStructureDataSets.add(new StructureDataSet((NbtCompound) s));
         }
+        activeStructureDataSet = new StructureDataSet(tag.getCompound("active"));
         return this;
     }
 }
