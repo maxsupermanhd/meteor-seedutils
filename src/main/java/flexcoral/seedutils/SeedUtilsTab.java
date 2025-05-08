@@ -10,10 +10,16 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.seedfinding.mccore.rand.seed.StructureSeed;
 import com.seedfinding.mccore.version.MCVersion;
 import com.seedfinding.mcfeature.Feature;
+import com.seedfinding.mcfeature.decorator.Decorator;
+import com.seedfinding.mcfeature.loot.LootChest;
+import com.seedfinding.mcfeature.loot.LootGenerator;
 import com.seedfinding.mcfeature.structure.*;
 import flexcoral.seedutils.screens.LongsViewScreen;
 import flexcoral.seedutils.screens.StringPickScreen;
+import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import meteordevelopment.meteorclient.gui.GuiTheme;
+import meteordevelopment.meteorclient.gui.renderer.GuiRenderer;
+import meteordevelopment.meteorclient.gui.renderer.packer.GuiTexture;
 import meteordevelopment.meteorclient.gui.tabs.Tab;
 import meteordevelopment.meteorclient.gui.tabs.TabScreen;
 import meteordevelopment.meteorclient.gui.tabs.WindowTabScreen;
@@ -26,11 +32,19 @@ import meteordevelopment.meteorclient.gui.widgets.input.WIntEdit;
 import meteordevelopment.meteorclient.gui.widgets.input.WTextBox;
 import meteordevelopment.meteorclient.gui.widgets.pressable.WButton;
 import meteordevelopment.meteorclient.gui.widgets.pressable.WMinus;
+import meteordevelopment.meteorclient.utils.Utils;
+import net.minecraft.block.BlockEntityProvider;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.entity.BlockEntityType;
+import net.minecraft.block.entity.ChestBlockEntity;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.command.CommandSource;
+import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.item.ItemStack;
 import net.minecraft.loot.LootTable;
 import net.minecraft.loot.LootTables;
+import net.minecraft.loot.context.LootContext;
 import net.minecraft.loot.context.LootContextParameters;
 import net.minecraft.loot.context.LootContextTypes;
 import net.minecraft.loot.context.LootWorldContext;
@@ -41,7 +55,15 @@ import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.ReloadableRegistries;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.math.Vec3i;
+import net.minecraft.util.math.random.ChunkRandom;
+import net.minecraft.util.math.random.RandomSeed;
+import net.minecraft.util.math.random.Xoroshiro128PlusPlusRandom;
+import net.minecraft.world.World;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -166,31 +188,99 @@ public class SeedUtilsTab extends Tab {
                 } catch(NumberFormatException ignored) {
                     lootSearchSelectedWorldSeed = v.hashCode();
                 }
+                reload();
             };
 
             var blockPosBox = section.add(theme.horizontalList()).widget();
             blockPosBox.add(theme.label("Chest pos: "));
             var posEditX = blockPosBox.add(theme.intEdit(lootSearchChestPos.getX(), Integer.MIN_VALUE, Integer.MAX_VALUE, true)).widget();
             posEditX.action = () -> lootSearchChestPos.setX(posEditX.get());
-            var posEditY = blockPosBox.add(theme.intEdit(lootSearchChestPos.getX(), Integer.MIN_VALUE, Integer.MAX_VALUE, true)).widget();
+            var posEditY = blockPosBox.add(theme.intEdit(lootSearchChestPos.getY(), Integer.MIN_VALUE, Integer.MAX_VALUE, true)).widget();
             posEditY.action = () -> lootSearchChestPos.setY(posEditY.get());
-            var posEditZ = blockPosBox.add(theme.intEdit(lootSearchChestPos.getX(), Integer.MIN_VALUE, Integer.MAX_VALUE, true)).widget();
-            posEditZ.action = () -> lootSearchChestPos.setY(posEditZ.get());
+            var posEditZ = blockPosBox.add(theme.intEdit(lootSearchChestPos.getZ(), Integer.MIN_VALUE, Integer.MAX_VALUE, true)).widget();
+            posEditZ.action = () -> lootSearchChestPos.setZ(posEditZ.get());
+            var lookAtBtn = blockPosBox.add(theme.button(GuiRenderer.CIRCLE)).widget();
+            lookAtBtn.action = () -> {
+                var rc = mc.cameraEntity.raycast(20, 0, false);
+                if (rc.getType() == HitResult.Type.BLOCK) {
+                    lootSearchChestPos = new BlockPos(new Vec3i((int) rc.getPos().x, (int) rc.getPos().y, (int) rc.getPos().z)).mutableCopy();
+                    reload();
+                }
+            };
 
+            var randIndexBox = section.add(theme.horizontalList()).widget();
+            randIndexBox.add(theme.label("Rand index: "));
+            var randIndexEdit = randIndexBox.add(theme.intEdit(0, Integer.MIN_VALUE, Integer.MAX_VALUE, true)).widget();
 
-//            ReloadableRegistries.Lookup lookup = mc.getServer().getReloadableRegistries();
-//            lookup.getIds(RegistryKeys.LOOT_TABLE);
-//
+            var randStepBox = section.add(theme.horizontalList()).widget();
+            randStepBox.add(theme.label("Rand step: "));
+            var randStepEdit = randStepBox.add(theme.intEdit(0, Integer.MIN_VALUE, Integer.MAX_VALUE, true)).widget();
+
+            var genList = section.add(theme.verticalList()).widget();
+            var genResults = section.add(theme.verticalList()).widget();
+            var genBtn = genList.add(theme.button("Generate")).widget();
+            genBtn.action = () -> {
+//                ReloadableRegistries.Lookup lookup = mc.getServer().getReloadableRegistries();
+//                lookup.getIds(RegistryKeys.LOOT_TABLE);
 //            lookup.getLootTable(lootSearchSelectedLootTable).generateLoot()
-//
-//
-//            LootWorldContext lootWorldContext = new LootWorldContext.Builder(mc.getServer().getWorld(mc.world.getRegistryKey()))
-//                .add(LootContextParameters.ORIGIN, lootSearchChestPos.toCenterPos())
-//                .build(LootContextTypes.CHEST);
-
-
+//                LootWorldContext lootWorldContext = new LootWorldContext.Builder(mc.getServer().getWorld(mc.world.getRegistryKey()))
+//                    .add(LootContextParameters.ORIGIN, lootSearchChestPos.toCenterPos())
+//                    .add(LootContextParameters.THIS_ENTITY, mc.player)
+//                    .build(LootContextTypes.CHEST);
 //            LootWorldContext lootWorldContext = new net.minecraft.loot.context.LootWorldContext.Builder(mc.world.getServer().getOverworld()).build(LootContextTypes.EMPTY);
-//            ObjectArrayList<ItemStack> objectArrayList = LootTable.builder().build().generateLoot(LootContext.table(LootTable.GENERIC));
+//                ObjectArrayList<ItemStack> objectArrayList = LootTable.builder().build().generateLoot(lootWorldContext, lootSearchSelectedWorldSeed);
+
+                ChestBlockEntity chestBlockEntity = (ChestBlockEntity) ((BlockEntityProvider)Blocks.CHEST).createBlockEntity(lootSearchChestPos, Blocks.CHEST.getDefaultState());
+                var chunkRandom = new ChunkRandom(new Xoroshiro128PlusPlusRandom(RandomSeed.getSeed()));
+
+                var chunkPos = new ChunkPos(lootSearchChestPos);
+                long l = chunkRandom.setPopulationSeed(lootSearchSelectedWorldSeed, chunkPos.x*16, chunkPos.z*16);
+                chunkRandom.setDecoratorSeed(l, randIndexEdit.get(), randStepEdit.get());
+                chunkRandom.nextInt(3);
+                chestBlockEntity.setLootTable(lootSearchSelectedLootTable, chunkRandom.nextLong());
+                var serverWorld = mc.getServer().getWorld(World.OVERWORLD);
+                chestBlockEntity.setWorld(serverWorld);
+                chestBlockEntity.generateLoot(mc.player);
+
+                genResults.clear();
+                genResults.add(theme.label("World seed " + lootSearchSelectedWorldSeed));
+                genResults.add(theme.label("Chunk " + lootSearchChestPos + chunkPos));
+                genResults.add(theme.label("Rng index " + randIndexEdit.get() + " step " + randStepEdit.get() + " loot " + chestBlockEntity.getLootTableSeed()));
+                genResults.add(theme.label("Generated " + chestBlockEntity.size() + " item stacks"));
+                var rest = genResults.add(theme.table()).widget();
+                {
+                    var i = 1;
+                    for (ItemStack s : chestBlockEntity) {
+                        rest.add(theme.item(s));
+                        if (i % 9 == 0) {
+                            rest.row();
+                        }
+                        i++;
+                    }
+                }
+
+                var checkBtn = genResults.add(theme.button("check actual")).widget();
+                checkBtn.action = () -> {
+                    genResults.add(theme.label("checking at " + lootSearchChestPos));
+                    var ent = mc.world.getBlockEntity(lootSearchChestPos, BlockEntityType.CHEST);
+                    if (ent.isPresent()) {
+                        genResults.add(theme.label("Rng loot " + ent.get().getLootTableSeed()));
+                        {
+                            var i = 1;
+                            for (ItemStack s : ent.get()) {
+                                rest.add(theme.item(s));
+                                if (i % 9 == 0) {
+                                    rest.row();
+                                }
+                                i++;
+                            }
+                        }
+                    } else {
+                        genResults.add(theme.label("no chest"));
+
+                    }
+                };
+            };
         }
 
         public void fillStructureToRandomWorldSeedsSection(WSection section) {

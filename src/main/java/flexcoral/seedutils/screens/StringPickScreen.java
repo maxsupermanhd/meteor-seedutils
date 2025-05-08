@@ -65,9 +65,16 @@ public class StringPickScreen<T> extends WindowScreen {
     private void fillTable(WTable table) {
         options.sort(Comparator.comparing(Object::toString));
         for (T option : options) {
-            table.add(theme.label(stringer != null ? stringer.toString(option) : option.toString())).expandX();
+            String s = stringer != null ? stringer.toString(option) : option.toString();
+            if (!filterText.isBlank() && !s.contains(filterText)) {
+                continue;
+            }
+            table.add(theme.label(s)).expandX();
             WButton b = table.add(theme.button("Select")).widget();
-            b.action = () -> callback.selection(option);
+            b.action = () -> {
+                callback.selection(option);
+            };
+            table.row();
         }
     }
 }
