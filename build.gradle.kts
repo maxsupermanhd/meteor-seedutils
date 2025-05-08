@@ -1,5 +1,5 @@
 plugins {
-    id("fabric-loom") version "1.9-SNAPSHOT"
+    id("fabric-loom") version "1.10-SNAPSHOT"
 }
 
 base {
@@ -44,6 +44,10 @@ dependencies {
     modImplementation("com.seedfinding:mc_biome:41a42cb9019a552598f12089059538853e18ec78")
     modImplementation("com.seedfinding:mc_terrain:b4246cbd5880c4f8745ccb90e1b102bde3448126")
     modImplementation("com.seedfinding:mc_feature:919b7e513cc1e87e029a9cd703fc4e2dc8686229")
+}
+
+loom {
+    accessWidenerPath = file("src/main/resources/seedutils.accesswidener")
 }
 
 tasks {

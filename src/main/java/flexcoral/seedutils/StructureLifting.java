@@ -172,17 +172,17 @@ public class StructureLifting {
 
         @Override
         public Data fromTag(NbtCompound tag) {
-            this.spacing = tag.getInt("spacing");
-            this.separation = tag.getInt("separation");
-            this.salt = tag.getInt("salt");
-            this.chunkX = tag.getInt("chunkX");
-            this.chunkZ = tag.getInt("chunkZ");
-            this.regionX = tag.getInt("regionX");
-            this.regionZ = tag.getInt("regionZ");
-            this.offsetX = tag.getInt("offsetX");
-            this.offsetZ = tag.getInt("offsetZ");
-            this.offset = tag.getInt("offset");
-            this.name = tag.getString("name");
+            this.spacing = tag.getInt("spacing").orElse(0);
+            this.separation = tag.getInt("separation").orElse(0);
+            this.salt = tag.getInt("salt").orElse(0);
+            this.chunkX = tag.getInt("chunkX").orElse(0);
+            this.chunkZ = tag.getInt("chunkZ").orElse(0);
+            this.regionX = tag.getInt("regionX").orElse(0);
+            this.regionZ = tag.getInt("regionZ").orElse(0);
+            this.offsetX = tag.getInt("offsetX").orElse(0);
+            this.offsetZ = tag.getInt("offsetZ").orElse(0);
+            this.offset = tag.getInt("offset").orElse(0);
+            this.name = tag.getString("name").orElse("");
             return this;
         }
     }

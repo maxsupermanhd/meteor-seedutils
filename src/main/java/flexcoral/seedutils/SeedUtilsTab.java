@@ -43,6 +43,7 @@ import net.minecraft.registry.ReloadableRegistries;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
@@ -73,7 +74,8 @@ public class SeedUtilsTab extends Tab {
         private enum pageType {
             Lifting("Lifting"),
             StructureSets("Structure sets"),
-            Utilities("Utilities");
+            Utilities("Utilities"),
+            HashedSeeds("Hashed seeds");
 
             private final String labelText;
             pageType(String lifting) {
@@ -109,7 +111,39 @@ public class SeedUtilsTab extends Tab {
                 case Utilities:
                     fillLootLookupSection(list.add(theme.section("Loot search")).expandX().widget());
                     fillStructureToRandomWorldSeedsSection(list.add(theme.section("To random world seeds")).expandX().widget());
+                case HashedSeeds:
+                    fillHashedSeedsSection(list.add(theme.section("Hashed seeds")).expandX().widget());
             }
+        }
+
+        public void fillHashedSeedsSection(WSection section) {
+            SeedUtilsSystem sys = SeedUtilsSystem.get();
+
+            if (mc.world != null) {
+                var currentHashedSeed = section.add(theme.horizontalList()).widget();
+                currentHashedSeed.add(theme.label(String.format("Current dimension hashed seed: %d", mc.world.getBiomeAccess().seed)));
+            }
+
+            var t = section.add(theme.table()).expandX().widget();
+
+            t.add(theme.label("when"));
+            t.add(theme.label("hashed seed"));
+            t.add(theme.label("copy"));
+
+            List<Long> keys = new ArrayList<>(sys.savedHashedSeeds.keySet().stream().toList());
+            keys.sort(Long::compare);
+
+            for (Long key : keys) {
+                t.add(theme.label(localTimeString(key)));
+                var s = sys.savedHashedSeeds.get(key).toString();
+                t.add(theme.label(s));
+                var copyBtn = t.add(theme.button("copy")).widget();
+                copyBtn.action = () -> {
+                    mc.keyboard.setClipboard(s);
+                    copyBtn.set("copied");
+                };
+            }
+
         }
 
         public void fillLootLookupSection(WSection section) {
@@ -277,18 +311,21 @@ public class SeedUtilsTab extends Tab {
             WButton fromClipBtn = clipOpts.add(theme.button("From clipboard")).widget();
             fromClipBtn.action = () -> {
                 try {
-                    sys.activeStructureDataSet = new SeedUtilsSystem.StructureDataSet("Pasted").fromTag(new StringNbtReader(new StringReader(mc.keyboard.getClipboard())).parseCompound());
+                    sys.activeStructureDataSet = new SeedUtilsSystem.StructureDataSet("Pasted").fromTag(StringNbtReader.readCompound(mc.keyboard.getClipboard()));
                 } catch (CommandSyntaxException ignored) {}
                 reload();
             };
             WButton toClipBtn = clipOpts.add(theme.button("To clipboard")).widget();
             toClipBtn.action = () -> {
-                mc.keyboard.setClipboard(new StringNbtWriter().apply(sys.activeStructureDataSet.toTag()));
+                var snbtWriter = new StringNbtWriter();
+                snbtWriter.visitCompound(sys.activeStructureDataSet.toTag());
+                mc.keyboard.setClipboard(snbtWriter.getString());
                 toClipBtn.set(String.format("Copied %d structures", sys.activeStructureDataSet.data.size()));
             };
             WButton moveToSavedSetsBtn = clipOpts.add(theme.button("Move to saved sets")).widget();
             moveToSavedSetsBtn.action = () -> {
                 if (!sys.savedStructureDataSets.contains(sys.activeStructureDataSet)) {
+                    sys.activeStructureDataSet.createdAt = Instant.now().getEpochSecond();
                     sys.savedStructureDataSets.add(sys.activeStructureDataSet);
                 }
                 sys.activeStructureDataSet = null;
@@ -385,6 +422,10 @@ public class SeedUtilsTab extends Tab {
                 mc.setScreen(new LongsViewScreen(theme, "Lifted random world seeds", ws));
             };
             results.row();
+        }
+
+        public static String localTimeString(Long t) {
+            return LocalDateTime.ofEpochSecond(t/1000, (int)(t%1000)*1000000, ZoneOffset.UTC).toString();
         }
 
         public static Map<String, FeatureFactory<? extends Structure<?, ?>>> defaultStructures = new HashMap<>();

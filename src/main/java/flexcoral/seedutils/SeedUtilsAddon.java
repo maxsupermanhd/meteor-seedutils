@@ -1,6 +1,7 @@
 package flexcoral.seedutils;
 
 import com.mojang.logging.LogUtils;
+import flexcoral.seedutils.modules.HashedSeedLogger;
 import meteordevelopment.meteorclient.addons.GithubRepo;
 import meteordevelopment.meteorclient.addons.MeteorAddon;
 import meteordevelopment.meteorclient.gui.tabs.Tabs;
@@ -20,7 +21,7 @@ public class SeedUtilsAddon extends MeteorAddon {
         LOG.info("Initializing Meteor Addon Template");
         Tabs.add(new SeedUtilsTab());
         // Modules
-//        Modules.get().add(new StructureCollector());
+        Modules.get().add(new HashedSeedLogger());
 
         // HUD
 //        Hud.get().register(HudExample.INFO);

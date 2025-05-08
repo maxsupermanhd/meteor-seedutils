@@ -20,6 +20,7 @@
   "mixins": [
     "seedutils.mixins.json"
   ],
+  "accessWidener": "seedutils.accesswidener",
   "custom": {
     "meteor-client:color": "225,25,25"
   },

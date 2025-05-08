@@ -8,6 +8,7 @@ import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtList;
 
+import javax.annotation.Nullable;
 import java.util.*;
 
 public class SeedUtilsSystem extends System<SeedUtilsSystem> {
@@ -19,7 +20,14 @@ public class SeedUtilsSystem extends System<SeedUtilsSystem> {
     }
 
     public List<StructureDataSet> savedStructureDataSets = new ArrayList<>();
+    @Nullable
     public StructureDataSet activeStructureDataSet;
+
+    public Map<Long, Long> savedHashedSeeds = new HashMap<>();
+
+    public synchronized void addHashedSeed(long s) {
+        savedHashedSeeds.put(java.lang.System.currentTimeMillis(), s);
+    }
 
     public static class StructureDataSet implements ISerializable<StructureDataSet> {
         public List<StructureData> data;
@@ -50,12 +58,14 @@ public class SeedUtilsSystem extends System<SeedUtilsSystem> {
 
         @Override
         public StructureDataSet fromTag(NbtCompound tag) {
-            name = tag.getString("server");
-            createdAt = tag.getLong("createdAt");
+            name = tag.getString("server").orElse("");
+            createdAt = tag.getLong("createdAt").orElse(0L);
             data = new ArrayList<>();
-            NbtList structs = tag.getList("structs", NbtElement.COMPOUND_TYPE);
-            for (NbtElement struct : structs) {
-                data.add(new StructureData((NbtCompound) struct));
+            Optional<NbtList> structs = tag.getList("structs");
+            if (structs.isPresent()) {
+                for (NbtElement struct : structs.get()) {
+                    data.add(new StructureData((NbtCompound) struct));
+                }
             }
             return this;
         }
@@ -77,7 +87,7 @@ public class SeedUtilsSystem extends System<SeedUtilsSystem> {
         @Override
         public StructureLifting.Data fromTag(NbtCompound tag) {
             super.fromTag(tag);
-            addedAt = tag.getLong("addedAt");
+            addedAt = tag.getLong("addedAt").orElse(0L);
             return this;
         }
 
@@ -97,17 +107,22 @@ public class SeedUtilsSystem extends System<SeedUtilsSystem> {
             saved.add(e.toTag());
         }
         tag.put("saved", saved);
-        tag.put("active", activeStructureDataSet.toTag());
+        if (activeStructureDataSet != null) {
+            tag.put("active", activeStructureDataSet.toTag());
+        }
         return tag;
     }
     @Override
     public SeedUtilsSystem fromTag(NbtCompound tag) {
-        NbtList saved = tag.getList("saved", NbtElement.COMPOUND_TYPE);
+        Optional<NbtList> saved = tag.getList("saved");
         savedStructureDataSets = new ArrayList<>();
-        for (NbtElement s : saved) {
-            savedStructureDataSets.add(new StructureDataSet((NbtCompound) s));
+        if (saved.isPresent()) {
+            for (NbtElement s : saved.get()) {
+                savedStructureDataSets.add(new StructureDataSet((NbtCompound) s));
+            }
         }
-        activeStructureDataSet = new StructureDataSet(tag.getCompound("active"));
+        Optional<NbtCompound> active = tag.getCompound("active");
+        activeStructureDataSet = active.map(StructureDataSet::new).orElse(null);
         return this;
     }
 }
